@@ -1,419 +1,344 @@
+import {
+  stockBalances,
+  inrBalances,
+  orderBook,
+  lastTradedPrices,
+  marketMakerId,
+  markets,
+} from "../db/index";
 import { Request, Response } from "express";
 import { catchAsync, sendResponse } from "../utils/api.util";
-import { INR_BALANCES, ORDERBOOK, STOCK_BALANCES } from "../db";
 
-const proboId = process.env.PROBO_USER_ID||"prober";
+const MARKET_INFO: { [symbol: string]: Market } = {};
 
-interface MintParticipant {
-  user: string;
-  stockType: "yes" | "no";
-  qty: number;
+function executeTrade(
+  buyerId: string,
+  sellerId: string,
+  stockSymbol: string,
+  quantity: number,
+  price: number,
+  stockType: "yes" | "no"
+) {
+  const totalPrice = quantity * price;
+
+  inrBalances[buyerId].locked -= totalPrice;
+
+  // Update seller's INR balance
+  if (!inrBalances[sellerId]) {
+    inrBalances[sellerId] = { balance: 0, locked: 0 };
+  }
+  inrBalances[sellerId].balance += totalPrice;
+
+  // Update buyer's stock balance
+  if (!stockBalances[buyerId]) {
+    stockBalances[buyerId] = {};
+  }
+  if (!stockBalances[buyerId][stockSymbol]) {
+    stockBalances[buyerId][stockSymbol] = {};
+  }
+  if (!stockBalances[buyerId][stockSymbol][stockType]) {
+    stockBalances[buyerId][stockSymbol][stockType] = { quantity: 0, locked: 0 };
+  }
+  stockBalances[buyerId][stockSymbol][stockType].quantity += quantity;
+
+  //@ts-ignore
+  stockBalances[sellerId][stockSymbol][stockType].locked -= quantity;
+
+  // Update last traded price
+  if (!lastTradedPrices[stockSymbol]) {
+    lastTradedPrices[stockSymbol] = {};
+  }
+  lastTradedPrices[stockSymbol][stockType] = price;
 }
 
-interface MintList {
-  participants: MintParticipant[];
-  isComplete: boolean;
+function matchOrders(
+  stockSymbol: string,
+  stockType: "yes" | "no",
+  isBuyOrder: boolean
+) {
+  const bookSide = orderBook[stockSymbol][stockType];
+  const orderSide = isBuyOrder ? "buy" : "sell";
+  const oppositeSide = isBuyOrder ? "sell" : "buy";
+
+  const myOrders = bookSide[orderSide];
+  const theirOrders = bookSide[oppositeSide];
+
+  const myPrices = Object.keys(myOrders)
+    .map(Number)
+    .sort((a, b) => (isBuyOrder ? b - a : a - b));
+
+  for (const myPrice of myPrices) {
+    const myOrderEntries = myOrders[myPrice.toString()].orders;
+
+    const theirPrices = Object.keys(theirOrders)
+      .map(Number)
+      .sort((a, b) => (isBuyOrder ? a - b : b - a));
+
+    for (const theirPrice of theirPrices) {
+      if (
+        (isBuyOrder && myPrice < theirPrice) ||
+        (!isBuyOrder && myPrice > theirPrice)
+      ) {
+        continue;
+      }
+
+      const theirOrderEntries = theirOrders[theirPrice.toString()].orders;
+
+      while (myOrderEntries.length > 0 && theirOrderEntries.length > 0) {
+        const myOrder = myOrderEntries[0];
+        const theirOrder = theirOrderEntries[0];
+
+        const tradeQuantity = Math.min(myOrder.quantity, theirOrder.quantity);
+        const tradePrice = theirPrice; // Use their price for the trade
+
+        executeTrade(
+          isBuyOrder ? myOrder.userId : theirOrder.userId,
+          isBuyOrder ? theirOrder.userId : myOrder.userId,
+          stockSymbol,
+          tradeQuantity,
+          tradePrice,
+          stockType
+        );
+
+        // Update quantities
+        myOrder.quantity -= tradeQuantity;
+        theirOrder.quantity -= tradeQuantity;
+        myOrders[myPrice.toString()].total -= tradeQuantity;
+        theirOrders[theirPrice.toString()].total -= tradeQuantity;
+
+        if (myOrder.quantity === 0) {
+          myOrderEntries.shift();
+        }
+
+        if (theirOrder.quantity === 0) {
+          theirOrderEntries.shift();
+        }
+      }
+
+      // Clean up empty price levels
+      if (theirOrders[theirPrice.toString()].orders.length === 0) {
+        delete theirOrders[theirPrice.toString()];
+      }
+
+      if (myOrders[myPrice.toString()].orders.length === 0) {
+        delete myOrders[myPrice.toString()];
+        break;
+      }
+    }
+  }
 }
 
-interface MarketInfo {
-  startTime: number;
-  endTime: number;
-  result?: "yes" | "no";
-}
+export const mintTokens = (stockSymbol: string, mintEntries: MintEntry[]) => {
+  const yesEntries = mintEntries.filter((entry) => entry.type === "yes");
+  const noEntries = mintEntries.filter((entry) => entry.type === "no");
 
-const BUY_ORDERS: {
-  [symbol: string]: {
-    [price: number]: {
-      [userId: string]: {
-        quantity: number;
-        stockType: "yes" | "no";
+  const yesQuantity = yesEntries.reduce(
+    (sum, entry) => sum + entry.quantity,
+    0
+  );
+  const noQuantity = noEntries.reduce((sum, entry) => sum + entry.quantity, 0);
+
+  if (yesQuantity !== noQuantity) {
+    throw new Error("Mismatch in YES and NO quantities");
+  }
+
+  mintEntries.forEach((entry) => {
+    if (!stockBalances[entry.user]) {
+      stockBalances[entry.user] = {};
+    }
+    if (!stockBalances[entry.user][stockSymbol]) {
+      stockBalances[entry.user][stockSymbol] = {
+        yes: { quantity: 0, locked: 0 },
+        no: { quantity: 0, locked: 0 },
       };
-    };
-  };
-} = {};
+    }
+    //@ts-ignore
+    stockBalances[entry.user][stockSymbol][entry.type].quantity +=
+      entry.quantity;
 
-const LOCKED_AMOUNTS: {
-  [symbol: string]: {
-    [userId: string]: {
-      [stockType: string]: {
-        quantity: number;
-        amount: number;
-      };
-    };
-  };
-} = {};
+    const price = entry.type === "yes" ? 6 : 4; // Assuming YES is 6 and NO is 4 as per your example
+    inrBalances[entry.user].locked -= entry.quantity * price * 100; // Convert to paise
+  });
+};
 
-
-const MINT_LISTS: { [symbol: string]: MintList[] } = {};
-
-const MARKET_INFO: { [symbol: string]: MarketInfo } = {};
-
-function isMarketOpen(symbol: string): boolean {
-  const now = Date.now();
-  console.log(MARKET_INFO)
-  console.log(symbol)
-  console.log(MARKET_INFO[symbol])
-  return MARKET_INFO[symbol] && now >= MARKET_INFO[symbol].startTime && now < MARKET_INFO[symbol].endTime;
-}
-
-
-
-
+import { Market, MintEntry, OrderEntry } from "../db/types";
+import { generateOrderId } from "../utils/generateOrderId";
 
 export const buyStock = catchAsync(async (req: Request, res: Response) => {
-  const {
+  const { userId, stockSymbol, quantity, price, stockType } = req.body;
+  if (
+    !userId ||
+    !stockSymbol ||
+    !quantity ||
+    price === undefined ||
+    !stockType
+  ) {
+    return res.status(400).json({ error: "Missing parameters" });
+  }
+  if (!markets[stockSymbol]) {
+    return res.status(404).json({ error: "Market not found" });
+  }
+
+  const pricePaise = Math.round(price);
+  const totalCost = quantity * pricePaise;
+
+  if (!inrBalances[userId]) {
+    inrBalances[userId] = { balance: 0, locked: 0 };
+  }
+
+  if (inrBalances[userId].balance < totalCost) {
+    return res.status(400).json({ error: "Insufficient INR balance" });
+  }
+  inrBalances[userId].balance -= totalCost;
+  inrBalances[userId].locked += totalCost;
+
+  const orderId = generateOrderId();
+  const orderEntry: OrderEntry = {
+    orderId,
     userId,
-    stockSymbol,
     quantity,
-    price,
-    stockType,
-  }: {
-    userId: string;
-    stockSymbol: string;
-    quantity: number;
-    price: number;
-    stockType: "yes" | "no";
-  } = req.body;
+    price: pricePaise,
+    orderType: "buy",
+  };
 
-  if (!isMarketOpen(stockSymbol)) {
-    return sendResponse(res, 400, { message: "Market is closed" });
+  //@ts-ignore
+  const bookSide = orderBook[stockSymbol][stockType];
+  const priceStr = pricePaise.toString();
+  if (!bookSide.buy[priceStr]) {
+    bookSide.buy[priceStr] = { total: 0, orders: [] };
   }
-  const totalCost = quantity * price;
+  bookSide.buy[priceStr].total += quantity;
+  bookSide.buy[priceStr].orders.push(orderEntry);
+  matchOrders(stockSymbol, stockType, true);
 
-  if (!INR_BALANCES[userId]) {
-    return sendResponse(res, 404, { message: "User not found" });
-  }
-  if (!ORDERBOOK[stockSymbol]) {
-    return sendResponse(res, 404, { message: "Symbol not found" });
-  }
-  if (INR_BALANCES[userId].balance < totalCost) {
-    return sendResponse(res, 400, { message: "Insufficient balance" });
-  }
-
-  if (!STOCK_BALANCES[userId]) {
-    STOCK_BALANCES[userId] = {};
-  }
-  if (!STOCK_BALANCES[userId][stockSymbol]) {
-    STOCK_BALANCES[userId][stockSymbol] = { yes: { quantity: 0, locked: 0 }, no: { quantity: 0, locked: 0 } };
-  }
-
-  let availableStocks = quantity;
-  let totalTradeQty = 0;
-
-  if (ORDERBOOK[stockSymbol][stockType][price] && ORDERBOOK[stockSymbol][stockType][price].total > 0) {
-    const orders = ORDERBOOK[stockSymbol][stockType][price].orders;
-    
-    for (const sellerId in orders) {
-      
-      if (availableStocks === 0) break;
-      
-      const sellerQuantity = orders[sellerId];
-      const tradeQuantity = Math.min(availableStocks, sellerQuantity);
-      
-      // Execute the trade
-      totalTradeQty += tradeQuantity;
-      availableStocks -= tradeQuantity;
-      
-      // Update seller's balances
-  
-      INR_BALANCES[sellerId].balance += tradeQuantity * price;
-      
-      STOCK_BALANCES[sellerId][stockSymbol][stockType].locked -= tradeQuantity;
-
-      
-      // Update buyer's stock balance
-      STOCK_BALANCES[userId][stockSymbol][stockType].quantity += tradeQuantity;
-      console.log("3")
-      
-      // Update orderbook
-      ORDERBOOK[stockSymbol][stockType][price].total -= tradeQuantity;
-      console.log("4")
-      ORDERBOOK[stockSymbol][stockType][price].orders[sellerId] -= tradeQuantity;
-      console.log("5")
-      
-      if (ORDERBOOK[stockSymbol][stockType][price].orders[sellerId] === 0) {
-        console.log("6")
-        delete ORDERBOOK[stockSymbol][stockType][price].orders[sellerId];
-        console.log("7")
-      }
-    }
-    
-    // Remove price level if total is 0
-    if (ORDERBOOK[stockSymbol][stockType][price].total === 0) {
-      console.log("8")
-      delete ORDERBOOK[stockSymbol][stockType][price];
-    }
-  }
-  
-  if (availableStocks > 0) {
-    console.log("9")
-    const oppositeType = stockType === "yes" ? "no" : "yes";
-    const reversePrice = 1000 - price; // 10 rupees in paise
-    
-    if (!ORDERBOOK[stockSymbol][oppositeType][reversePrice]) {
-      console.log("10")
-      ORDERBOOK[stockSymbol][oppositeType][reversePrice] = { total: 0, orders: {} };
-      console.log("11")
-    }
-    console.log("12")
-    
-    ORDERBOOK[stockSymbol][oppositeType][reversePrice].total += availableStocks;
-    console.log("13")
-    ORDERBOOK[stockSymbol][oppositeType][reversePrice].orders[proboId] = 
-
-    (ORDERBOOK[stockSymbol][oppositeType][reversePrice].orders[proboId] || 0) + availableStocks;
-    console.log("14")
-    
-    // Lock buyer's balance for remaining stocks
-    const lockedAmount = availableStocks * price;
-    INR_BALANCES[userId].locked += lockedAmount;
-    INR_BALANCES[userId].balance -= lockedAmount;
-    console.log("15")
-    STOCK_BALANCES[userId][stockSymbol][stockType].locked += availableStocks;
-    console.log("16")
-    
-    // Record the locked amount
-    if (!LOCKED_AMOUNTS[stockSymbol]) {
-      LOCKED_AMOUNTS[stockSymbol] = {};
-    }
-    if (!LOCKED_AMOUNTS[stockSymbol][userId]) {
-      LOCKED_AMOUNTS[stockSymbol][userId] = {};
-    }
-    if (!LOCKED_AMOUNTS[stockSymbol][userId][stockType]) {
-      LOCKED_AMOUNTS[stockSymbol][userId][stockType] = { quantity: 0, amount: 0 };
-    }
-    console.log("17")
-    LOCKED_AMOUNTS[stockSymbol][userId][stockType].quantity += availableStocks;
-    console.log("18")
-    LOCKED_AMOUNTS[stockSymbol][userId][stockType].amount += lockedAmount;
-    console.log("19")
-    
-    // Create or update probo's balance
-    if (!INR_BALANCES[proboId]) {
-      console.log("20")
-      INR_BALANCES[proboId] = { balance: 0, locked: 0 };
-    }
-    INR_BALANCES[proboId].locked += availableStocks * reversePrice;
-    console.log("21")
-    
-    // Add to BUY_ORDERS
-    if (!BUY_ORDERS[stockSymbol]) {
-      console.log("22")
-      BUY_ORDERS[stockSymbol] = {};
-    }
-    if (!BUY_ORDERS[stockSymbol][price]) {
-      console.log("23")
-      BUY_ORDERS[stockSymbol][price] = {};
-    }
-    BUY_ORDERS[stockSymbol][price][userId] = {
-      quantity: availableStocks,
-      stockType: stockType,
-    };
-
-    // Update or create MINT_LISTS
-    if (!MINT_LISTS[stockSymbol]) {
-      MINT_LISTS[stockSymbol] = [];
-    }
-    
-    let existingMintList = MINT_LISTS[stockSymbol].find(ml => !ml.isComplete);
-    if (!existingMintList) {
-      existingMintList = { participants: [], isComplete: false };
-      MINT_LISTS[stockSymbol].push(existingMintList);
-    }
-    existingMintList.participants.push({
-      user: userId,
-      stockType: stockType,
-      qty: availableStocks,
-    });
-
-    // Check if the mint list is complete
-    const totalYes = existingMintList.participants.reduce((sum, p) => p.stockType === "yes" ? sum + p.qty : sum, 0);
-    const totalNo = existingMintList.participants.reduce((sum, p) => p.stockType === "no" ? sum + p.qty : sum, 0);
-
-    if (totalYes === totalNo) {
-      existingMintList.isComplete = true;
-      // Process the complete mint list
-      for (const participant of existingMintList.participants) {
-        INR_BALANCES[participant.user].locked -= participant.qty * price;
-        STOCK_BALANCES[participant.user][stockSymbol][participant.stockType].quantity += participant.qty;
-        STOCK_BALANCES[participant.user][stockSymbol][participant.stockType].locked -= participant.qty;
-      }
-    }
-  }
-
-  // Update buyer's balance for traded stocks
-  INR_BALANCES[userId].balance -= totalTradeQty * price;
-
-  return sendResponse(res, 200, {
-    message: `Order processed successfully. Bought ${totalTradeQty} stocks immediately. ${availableStocks} stocks pending.`,
-    data: {
-      boughtQuantity: totalTradeQty,
-      pendingQuantity: availableStocks,
-      updatedOrderBook: ORDERBOOK[stockSymbol],
-      updatedUserBalance: INR_BALANCES[userId],
-      updatedUserStockBalance: STOCK_BALANCES[userId][stockSymbol],
-    },
+  return sendResponse(res, 201, {
+    message: "Buy order processed successfully",
   });
 });
 
 export const sellStock = catchAsync(async (req: Request, res: Response) => {
-  const {
+  const { userId, stockSymbol, quantity, price, stockType } = req.body;
+
+  // Validate input
+  if (
+    !userId ||
+    !stockSymbol ||
+    !quantity ||
+    price === undefined ||
+    !stockType
+  ) {
+    return res.status(400).json({ error: "Missing parameters" });
+  }
+
+  if (!markets[stockSymbol]) {
+    return res.status(404).json({ error: "Market not found" });
+  }
+
+  const pricePaise = Math.round(price); // Ensure price is integer paise
+
+  // Check if user has enough stock balance
+  if (
+    !stockBalances[userId] ||
+    !stockBalances[userId][stockSymbol] ||
+    //@ts-ignore
+    !stockBalances[userId][stockSymbol][stockType] ||
+    //@ts-ignore
+    stockBalances[userId][stockSymbol][stockType].quantity < quantity
+  ) {
+    return res.status(400).json({ error: "Insufficient stock balance" });
+  }
+
+  // Lock the stock quantity
+  //@ts-ignore
+  stockBalances[userId][stockSymbol][stockType].quantity -= quantity;
+  //@ts-ignore
+  stockBalances[userId][stockSymbol][stockType].locked += quantity;
+
+  // Create the order
+  const orderId = generateOrderId();
+  const orderEntry: OrderEntry = {
+    orderId,
     userId,
-    stockSymbol,
     quantity,
-    price,
-    stockType,
-  }: {
-    userId: string;
-    stockSymbol: string;
-    quantity: number;
-    price: number;
-    stockType: "yes" | "no";
-  } = req.body;
+    price: pricePaise,
+    orderType: "sell",
+  };
 
-  if (!isMarketOpen(stockSymbol)) {
-    return sendResponse(res, 400, { message: "Market is closed" });
+  // Place the order into the order book
+  //@ts-ignore
+  const bookSide = orderBook[stockSymbol][stockType];
+
+  const priceStr = pricePaise.toString();
+
+  if (!bookSide.sell[priceStr]) {
+    bookSide.sell[priceStr] = { total: 0, orders: [] };
   }
 
-  if (!STOCK_BALANCES[userId] || !STOCK_BALANCES[userId][stockSymbol]) {
-    return sendResponse(res, 404, { message: "User or stock not found" });
-  }
+  bookSide.sell[priceStr].total += quantity;
+  bookSide.sell[priceStr].orders.push(orderEntry);
 
-  const userStockBalance = STOCK_BALANCES[userId][stockSymbol][stockType];
-  if (userStockBalance.quantity < quantity) {
-    return sendResponse(res, 400, { message: "Insufficient stock balance" });
-  }
-
-  let remainingQuantity = quantity;
-  let totalTradeQty = 0;
-
-  // Check for matching buy orders
-  if (BUY_ORDERS[stockSymbol] && BUY_ORDERS[stockSymbol][price]) {
-    const buyOrders = BUY_ORDERS[stockSymbol][price];
-    for (const buyerId in buyOrders) {
-      if (remainingQuantity === 0) break;
-
-      const buyOrder = buyOrders[buyerId];
-      const tradeQuantity = Math.min(remainingQuantity, buyOrder.quantity);
-
-      // Execute the trade
-      totalTradeQty += tradeQuantity;
-      remainingQuantity -= tradeQuantity;
-
-      // Update seller's balances
-      console.log("second")
-      console.log(STOCK_BALANCES)
-      STOCK_BALANCES[userId][stockSymbol][stockType].quantity -= tradeQuantity;
-      INR_BALANCES[userId].balance += tradeQuantity * price;
-
-      // Update buyer's balances
-      INR_BALANCES[buyerId].locked -= tradeQuantity * price;
-      STOCK_BALANCES[buyerId][stockSymbol][buyOrder.stockType].quantity += tradeQuantity;
-      STOCK_BALANCES[buyerId][stockSymbol][buyOrder.stockType].locked -= tradeQuantity;
-
-      // Update BUY_ORDERS
-      buyOrder.quantity -= tradeQuantity;
-      if (buyOrder.quantity === 0) {
-        delete BUY_ORDERS[stockSymbol][price][buyerId];
-      }
-
-      // Update MINT_LISTS
-      const mintList = MINT_LISTS[stockSymbol].find(ml => ml.participants.some(p => p.user === buyerId));
-      if (mintList) {
-        const participant = mintList.participants.find(p => p.user === buyerId);
-        if (participant) {
-          participant.qty -= tradeQuantity;
-          if (participant.qty === 0) {
-            mintList.participants = mintList.participants.filter(p => p.user !== buyerId);
-          }
-        }
-      }
-    }
-
-    // Clean up empty price levels in BUY_ORDERS
-    if (Object.keys(BUY_ORDERS[stockSymbol][price]).length === 0) {
-      delete BUY_ORDERS[stockSymbol][price];
-    }
-  }
-
-  // If there are remaining stocks to sell, add them to the ORDERBOOK
-  if (remainingQuantity > 0) {
-    if (!ORDERBOOK[stockSymbol][stockType][price]) {
-      ORDERBOOK[stockSymbol][stockType][price] = { total: 0, orders: {} };
-    }
-    ORDERBOOK[stockSymbol][stockType][price].total += remainingQuantity;
-    ORDERBOOK[stockSymbol][stockType][price].orders[userId] = 
-      (ORDERBOOK[stockSymbol][stockType][price].orders[userId] || 0) + remainingQuantity;
-
-      // Record the locked amount
-      if (!LOCKED_AMOUNTS[stockSymbol]) {
-        LOCKED_AMOUNTS[stockSymbol] = {};
-      }
-      if (!LOCKED_AMOUNTS[stockSymbol][userId]) {
-        LOCKED_AMOUNTS[stockSymbol][userId] = {};
-      }
-      if (!LOCKED_AMOUNTS[stockSymbol][userId][stockType]) {
-        LOCKED_AMOUNTS[stockSymbol][userId][stockType] = { quantity: 0, amount: 0 };
-      }
-      LOCKED_AMOUNTS[stockSymbol][userId][stockType].quantity += remainingQuantity;
-      // For sell orders, we don't lock an amount, but we can set it to 0 for consistency
-      LOCKED_AMOUNTS[stockSymbol][userId][stockType].amount += 0;
-  }
+  // Try to match with existing buy orders
+  matchOrders(stockSymbol, stockType, false);
 
   return sendResponse(res, 200, {
-    message: `Order processed successfully. Sold ${totalTradeQty} stocks immediately. ${remainingQuantity} stocks added to order book.`,
-    data: {
-      soldQuantity: totalTradeQty,
-      pendingQuantity: remainingQuantity,
-      updatedOrderBook: ORDERBOOK[stockSymbol],
-      updatedUserBalance: INR_BALANCES[userId],
-      updatedUserStockBalance: STOCK_BALANCES[userId][stockSymbol],
-    },
+    message: "Sell order processed successfully",
   });
 });
 
-export const endMarket = catchAsync(async (req: Request, res: Response) => {
-  const { stockSymbol, result }: { stockSymbol: string; result: "yes" | "no" } = req.body;
-
-  if (!MARKET_INFO[stockSymbol]) {
-    return sendResponse(res, 404, { message: "Market not found" });
-  }
-
-  // if (Date.now() < MARKET_INFO[stockSymbol].endTime) {
-  //   return sendResponse(res, 400, { message: "Market has not ended yet" });
-  // }
-
-  MARKET_INFO[stockSymbol].result = result;
-    refundLockedStocks(stockSymbol);
-
-    // Settle the market
-    settleMarket(stockSymbol);
-
-    return sendResponse(res, 200, {
-      message: `Market ${stockSymbol} has been settled with result: ${result}`,
-      data: {
-        marketInfo: MARKET_INFO[stockSymbol],
-      },
-    });
-  
-});
-
 export const createMarket = catchAsync(async (req: Request, res: Response) => {
-  const { stockSymbol, startTime, endTime }: { stockSymbol: string; startTime: number; endTime: number } = req.body;
+  const {
+    stockSymbol,
+    title,
+    description,
+    startTime,
+    endTime,
+    initialYesTokens,
+    initialNoTokens,
+  } = req.body;
 
-  if (MARKET_INFO[stockSymbol]) {
-    return sendResponse(res, 400, { message: "Market already exists" });
+  if (markets[stockSymbol]) {
+    return res.status(400).json({ error: "Market already exists" });
   }
 
-  MARKET_INFO[stockSymbol] = {
-    startTime,
-    endTime
+  const market: Market = {
+    stockSymbol,
+    title,
+    description,
+    startTime: new Date(startTime),
+    endTime: new Date(endTime),
+    initialYesTokens,
+    initialNoTokens,
   };
-  
 
-  ORDERBOOK[stockSymbol] = { yes: {}, no: {} };
-  BUY_ORDERS[stockSymbol] = {};
-  MINT_LISTS[stockSymbol] = [];
+  markets[stockSymbol] = market;
+
+  // Initialize the market maker's stock balances
+  if (!stockBalances[marketMakerId]) {
+    stockBalances[marketMakerId] = {};
+  }
+
+  stockBalances[marketMakerId][stockSymbol] = {
+    yes: {
+      quantity: initialYesTokens,
+      locked: 0,
+    },
+    no: {
+      quantity: initialNoTokens,
+      locked: 0,
+    },
+  };
+
+  // Initialize order book for the market
+  orderBook[stockSymbol] = {
+    yes: {
+      buy: {},
+      sell: {},
+    },
+    no: {
+      buy: {},
+      sell: {},
+    },
+  };
 
   return sendResponse(res, 200, {
     message: `Market ${stockSymbol} has been created`,
@@ -423,98 +348,97 @@ export const createMarket = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-export const getMarketStatus = catchAsync(async (req: Request, res: Response) => {
-  const { stockSymbol } = req.params;
+export const cancelOrder = catchAsync(async (req: Request, res: Response) => {
+  const { userId, orderId, stockSymbol, stockType, price, orderSide } =
+    req.body;
 
-  if (!MARKET_INFO[stockSymbol]) {
-    return sendResponse(res, 404, { message: "Market not found" });
+  if (
+    !userId ||
+    !orderId ||
+    !stockSymbol ||
+    !stockType ||
+    price === undefined ||
+    !orderSide
+  ) {
+    return res.status(400).json({ error: "Missing parameters" });
+  }
+  //@ts-ignore
+  const bookSide = orderBook[stockSymbol][stockType][orderSide];
+  const priceStr = price.toString();
+  const priceLevel = bookSide[priceStr];
+
+  if (!priceLevel) {
+    return res
+      .status(404)
+      .json({ error: "Order not found at this price level" });
   }
 
-  const now = Date.now();
-  let status: "not started" | "open" | "closed" | "settled";
+  const orderIndex = priceLevel.orders.findIndex(
+    (order: OrderEntry) => order.orderId === orderId && order.userId === userId
+  );
 
-  if (now < MARKET_INFO[stockSymbol].startTime) {
-    status = "not started";
-  } else if (now >= MARKET_INFO[stockSymbol].startTime && now < MARKET_INFO[stockSymbol].endTime) {
-    status = "open";
-  } else if (now >= MARKET_INFO[stockSymbol].endTime && !MARKET_INFO[stockSymbol].result) {
-    status = "closed";
+  if (orderIndex === -1) {
+    return res.status(404).json({ error: "Order not found" });
+  }
+
+  const order = priceLevel.orders.splice(orderIndex, 1)[0];
+  priceLevel.total -= order.quantity;
+
+  // Unlock balances
+  const totalAmount = order.quantity * order.price;
+
+  if (order.orderType === "buy") {
+    // Unlock INR
+    inrBalances[userId].balance += totalAmount;
+    inrBalances[userId].locked -= totalAmount;
   } else {
-    status = "settled";
-  }
+    // Unlock stocks
+    //@ts-ignore
 
-  return sendResponse(res, 200, {
-    data: {
-      stockSymbol,
-      status,
-      marketInfo: MARKET_INFO[stockSymbol],
-    },
-  });
+    stockBalances[userId][stockSymbol][stockType].quantity += order.quantity;
+    //@ts-ignore
+    stockBalances[userId][stockSymbol][stockType].locked -= order.quantity;
+  }
+  return sendResponse(res, 200, { message: "Order cancelled" });
 });
 
-// Helper function to convert rupees to paise
-function rupeeToePaise(amount: number): number {
-  return Math.round(amount * 100);
-}
+export const settleMarket = catchAsync(async (req: Request, res: Response) => {
+  const { marketId, result } = req.body;
 
-// Helper function to convert paise to rupees
-function paiseToRupee(amount: number): number {
-  return amount / 100;
-}
+  if (!markets[marketId]) {
+    return res.status(404).json({ error: "Market not found" });
+  }
 
-function refundLockedStocks(symbol: string) {
-  if (!LOCKED_AMOUNTS[symbol]) return;
+  if (result !== "yes" && result !== "no") {
+    return res.status(400).json({ error: "Invalid result" });
+  }
 
-  for (const userId in LOCKED_AMOUNTS[symbol]) {
-    for (const stockType in LOCKED_AMOUNTS[symbol][userId]) {
-      const { quantity, amount } = LOCKED_AMOUNTS[symbol][userId][stockType];
-      if (quantity > 0) {
-        // Refund the original locked amount
-        INR_BALANCES[userId].balance += amount;
-        INR_BALANCES[userId].locked -= amount;
+  markets[marketId].result = result;
 
-        // Reset locked stocks
-        if(stockType==="no"){
-          STOCK_BALANCES[userId][symbol]["no"].locked -= quantity;
+  // Process settlement
+  for (const userId in stockBalances) {
+    const userStocks = stockBalances[userId][marketId];
+    if (userStocks) {
+      //@ts-ignore
+      const winningStocks = userStocks[result];
+      const losingStocks = userStocks[result === "yes" ? "no" : "yes"];
+
+      if (winningStocks && winningStocks.quantity > 0) {
+        // Each winning stock is valued at face value (e.g., 1000 paise = 10 INR)
+        const payout = winningStocks.quantity * 1000; // 1000 paise = 10 INR
+        if (!inrBalances[userId]) {
+          inrBalances[userId] = { balance: 0, locked: 0 };
         }
-        else{
-          STOCK_BALANCES[userId][symbol]["yes"].locked -= quantity;
-        }
+        inrBalances[userId].balance += payout;
+        winningStocks.quantity = 0;
+      }
 
-        // Clear the locked amount record
-        LOCKED_AMOUNTS[symbol][userId][stockType] = { quantity: 0, amount: 0 };
+      if (losingStocks) {
+        losingStocks.quantity = 0;
       }
     }
   }
 
-  // Clean up the LOCKED_AMOUNTS data structure
-  delete LOCKED_AMOUNTS[symbol];
-}
-
-
-// Update the settleMarket function to use paise
-function settleMarket(symbol: string) {
-  const marketInfo = MARKET_INFO[symbol];
-  if (!marketInfo || !marketInfo.result) {
-    throw new Error("Market result not available");
-  }
-
-  for (const userId in STOCK_BALANCES) {
-    if (STOCK_BALANCES[userId][symbol]) {
-      const winningStockQuantity = STOCK_BALANCES[userId][symbol][marketInfo.result].quantity;
-      const settlementAmount = winningStockQuantity * rupeeToePaise(10); // 10 rupees in paise
-      INR_BALANCES[userId].balance += settlementAmount;
-
-      // Reset stock balances
-      STOCK_BALANCES[userId][symbol] = { yes: { quantity: 0, locked: 0 }, no: { quantity: 0, locked: 0 } };
-    }
-  }
-
-  // Clear orderbook and buy orders for this symbol
-  delete ORDERBOOK[symbol];
-  delete BUY_ORDERS[symbol];
-  delete MINT_LISTS[symbol];
-  delete LOCKED_AMOUNTS[symbol];
-
-}
-
+  delete markets[marketId];
+  return sendResponse(res, 200, { data: "market closed" });
+});

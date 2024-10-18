@@ -1,9 +1,10 @@
 import express from "express";
-import { buyStock,endMarket,sellStock} from "../controller/order";
+import { buyStock,cancelOrder,sellStock, settleMarket,createMarket} from "../controller/order";
 
 export const orderRouter = express.Router();
 
 orderRouter.post("/buy", buyStock);
 orderRouter.post("/sell", sellStock);
-// orderRouter.post("/mint", mintTokens);
-orderRouter.post("/endMarket/:marketSymbol", endMarket);
+orderRouter.post("/market/settle",settleMarket)
+orderRouter.post("/order/cancel/",cancelOrder)
+orderRouter.post("/market/create/",createMarket)

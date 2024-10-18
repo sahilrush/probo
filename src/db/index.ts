@@ -1,8 +1,10 @@
 
-import { InrBalances, StockBalances, OrderBook, StockSymbols } from "./types";
+import { InrBalances, StockBalances, OrderBook,  Market } from "./types";
 
-export const INR_BALANCES: InrBalances = {};
-export const ORDERBOOK: OrderBook = {};
-export const STOCK_BALANCES: StockBalances = {};
-export const STOCK_SYMBOLS: StockSymbols = {};
 
+export const markets: { [marketId: string]: Market } = {};
+export const inrBalances: InrBalances = {};
+export const stockBalances: StockBalances = {};
+export const orderBook: OrderBook = {};
+export const lastTradedPrices: { [stockSymbol: string]: { yes?: number; no?: number } } = {};
+export const marketMakerId = 'probo';
