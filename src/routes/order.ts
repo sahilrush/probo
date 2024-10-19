@@ -1,5 +1,5 @@
 import express from "express";
-import { buyStock,cancelOrder,sellStock, settleMarket,createMarket} from "../controller/order";
+import { buyStock, cancelOrder, createMarket, sellStock, settleMarket } from "../actions/order";
 
 export const orderRouter = express.Router();
 

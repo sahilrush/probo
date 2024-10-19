@@ -1,6 +1,6 @@
 // import { Response, Request } from "express";
 // import { catchAsync, sendResponse } from "../utils/api.util";
-// import { INR_BALANCES, STOCK_SYMBOLS,ORDERBOOK } from "../db";
+// import { INR_BALANCES, STOCK_SYMBOLS,ORDERBOOK } from "../db/types";
 // import AppError from "../utils/AppError";
 
 // export const createSymbol = catchAsync(async (req: Request, res: Response) => {
