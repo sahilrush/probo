@@ -1,15 +1,15 @@
+// Represents the balance of a user
 export interface UserBalance {
   balance: number;  // Available balance
   locked: number;   // Amount locked in orders
 }
 
+// Maps userId to their UserBalance
 export interface InrBalances {
   [userId: string]: UserBalance;
 }
 
-
-
-
+// Represents the stock balance for "yes" and "no" options
 export interface StockBalance {
   yes: {
     quantity: number;  // Quantity of "yes" options held
@@ -21,13 +21,14 @@ export interface StockBalance {
   };
 }
 
+// Maps userId to their StockBalance for different stock symbols
 export interface StockBalances {
   [userId: string]: {
     [stockSymbol: string]: StockBalance;
   };
 }
 
-
+// Represents an order entry at a specific price level
 export interface OrderEntry {
   total: number; // Total quantity for this price level
   orders: {
@@ -35,209 +36,50 @@ export interface OrderEntry {
   };
 }
 
-
-export interface OrderBook {
-  [symbol: string]: {
-    reverse: {
-      yes: {
-        [price: number]: {
-          mint: {
-            participants: {
-              price: number;
-              userId: string;
-              quantity: number;
-              type: "buy" | "sell";
-            }[];
-            remainingQty: number;
-          };
-          total: number;
-        };
-      };
-      no: {
-        [price: number]: {
-          mint: {
-            participants: {
-              price: number;
-              userId: string;
-              quantity: number;
-              type: "buy" | "sell";
-            }[];
-            remainingQty: number;
-          };
-          total: number;
-        };
-      };
+// Represents the order book for trading
+export const ORDERBOOK: {
+  [stockSymbol: string]: {
+    yes: {
+      [price: string]: OrderEntry; // Price level for "yes" options
     };
-    direct: {
-      yes: {
-        [price: number]: OrderEntry; // Direct buy orders
-      };
-      no: {
-        [price: number]: OrderEntry; // Direct sell orders
-      };
+    no: {
+      [price: string]: OrderEntry; // Price level for "no" options
     };
   };
-}
+} = {
+  "BTC_USDT_10_Oct_2024_9_30": {
+    yes: {
+      "9.5": {
+        total: 12, // Total quantity at this price level
+        orders: {
+          "user1": 10, // User1 ordered 10 shares
+          "user2": 2    // User2 ordered 2 shares
+        }
+      },
+      // Additional price levels can be added here
+      // "8.5": {
+      //   total: 12,
+      //   orders: {
+      //     "user1": 3,
+      //     "user2": 3,
+      //     "user3": 6
+      //   }
+      // }
+    },
+    no: {
+      // Price levels for "no" options will be added here
+    }
+  }
+};
 
-
+// Represents a stock symbol with additional details
 export interface StockSymbol {
   stockSymbol: string; // The symbol of the stock/option
   title: string;       // A title for the stock
   description: string; // Description of the stock/option
 }
 
+// Maps stockSymbol to its StockSymbol details
 export interface StockSymbols {
   [stockSymbol: string]: StockSymbol;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// export interface UserBalance {
-//   balance: number;
-//   locked: number;
-// }
-
-// export interface InrBalances {
-//   [userId: string]: UserBalance;
-// }
-
-// export interface OrderEntry {
-//   total: number;
-//   orders: {
-//     [userId: string]: number;
-//   };
-// }
-
-// export interface StockSymbol {
-//   stockSymbol: string;
-// }
-
-// export interface StockSymbols {
-//   [stockSymbol: string]: StockSymbol;
-// }
-
-// export interface StockBalance {
-//   yes: {
-//     quantity: number;
-//     locked: number;
-//   };
-//   no: {
-//     quantity: number;
-//     locked: number;
-//   };
-// }
-
-// export interface StockBalances {
-//   [userId: string]: {
-//     [stockSymbol: string]: StockBalance;
-//   };
-// }
-
-// export interface OrderListItem {
-//   stockSymbol: string;
-//   stockType: string;
-//   createdAt: Date;
-//   userId: string;
-//   quantity: number;
-//   price: number;
-//   id: string;
-//   orderType: string;
-//   totalPrice: number;
-//   status: "executed" | "pending";
-// }
-
-// export interface Market {
-//   stockSymbol: string;
-//   title: string;
-//   description: string;
-//   startTime: Date;
-//   endTime: Date;
-//   yes: number;
-//   no: number;
-//   result: StockType | null;
-// }
-// export interface Markets {
-//   [stockSymbol: string]: Market;
-// }
-// export type StockType = "yes" | "no";
-
-
-
-
-
-
-// export interface OrderBook {
-//   [symbol: string]: {
-//     yes: {
-//       [price: number]: OrderEntry;
-//     };
-//     no: {
-//       [price: number]: OrderEntry;
-//     };
-//   };
-// }
-
-
-
-
-
-
-
-// // export interface OrderBook {
-// //   [symbol: string]: {
-// //     reverse: {
-// //       yes: {
-// //         [price: number]: {
-// //           mint: {
-// //             participants: {
-// //               price:number;
-// //               userId: string;
-// //               quantity: number;
-// //               type: "buy" | "sell";
-// //             }[];
-// //             remainingQty: number;
-// //           };
-// //           total: number;
-// //         };
-// //       };
-// //       no: {
-// //         [price: number]: {
-// //           mint: {
-// //             participants: {
-// //               price:number;
-// //               userId: string;
-// //               quantity: number;
-
-// //               type: "buy" | "sell";
-// //             }[];
-// //             remainingQty: number;
-// //           };
-// //           total: number;
-// //         };
-// //       };
-// //     };
-// //     direct: {
-// //       yes: {
-// //         [price: number]: OrderEntry;
-// //       };
-// //       no: {
-// //         [price: number]: OrderEntry;
-// //       };
-// //     };
-// //   };
-// // }

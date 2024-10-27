@@ -6,8 +6,8 @@ import { onrampRouter } from "./routes/onramp";
 import { orderBookRouter } from "./routes/orderBook";
 import { resetDB } from "./utils/resetDB";
 import { createSymbolRouter } from "./routes/createSymbol";
-import { buyOrderRouter } from "./routes/buyOrder";
-import { sellOrderRouter } from "./routes/sellOrder";
+
+import { orderRoute } from "./routes/order";
 // import { marketRouter } from "./routes/market";
 
 const app = express();
@@ -26,7 +26,6 @@ app.use('/balance', balanceRouter);
 app.use('/onramp', onrampRouter);
 app.use('/orderbook', orderBookRouter);
 app.use('/symbol', createSymbolRouter)
-app.use('/order',buyOrderRouter)
-app.use('/order',sellOrderRouter)
+app.use('/order',orderRoute)
 
 export default app;
