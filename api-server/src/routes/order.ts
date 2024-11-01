@@ -7,7 +7,7 @@ export const orderRouter = express.Router();
 
 orderRouter.post("/trade/buy/",async(req:Request,res) => {
     try{
-            await    pushToQueue("BUY_ORDER",req.body,res);
+            await  pushToQueue("BUY_ORDER",req.body,res);
             res.status(200).send("Buy order queued successfully");
 
     }catch(err:any) {

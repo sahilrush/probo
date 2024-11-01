@@ -1,18 +1,18 @@
 import { WebSocketServer, WebSocket } from "ws";
 import http from "http";
-import app from "./app";
 import Redis from "ioredis";
 import { createUser } from "./actions/user";
+import express from "express";
 
+const app = express()
 
-const PORT = process.env.PORT || 8000;
+const PORT = process.env.PORT || 8069;
 const server = http.createServer(app); 
 
 export const redis = new Redis({ port: 6379, host: "localhost" });
 
 
 
-// Start listening on the HTTP server
 server.listen(PORT, () => {
   console.log(`Server running at port ${PORT}`);
 });
@@ -45,12 +45,3 @@ const pollQueue = async()=>{
 
 
 
-
-
-// const broadcastOrderBook = (orderBook) => {
-//   wss.clients.forEach(client => {
-//     if (client.readyState === WebSocket.OPEN) {
-//       client.send(JSON.stringify({ type: 'ORDER_BOOK_UPDATE', orderBook }));
-//     }
-//   });
-// };

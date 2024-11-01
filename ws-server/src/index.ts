@@ -1,7 +1,16 @@
 import { WebSocketServer, WebSocket } from "ws";
 import http from "http";
-import app from "./app"; // assuming `app` is your Express application
 import Redis from "ioredis";
+import express from "express"
+
+const app = express
+
+
+export const redis = new Redis({
+  port:6379,
+  host:"localhost"
+})
+export const subscriber =  new Redis({ port: 6379, host: "localhost" });
 
 
 const PORT = process.env.PORT || 8000;
@@ -9,7 +18,6 @@ const server = http.createServer(app); // Create an HTTP server instance with th
 const wss = new WebSocketServer({ server }); // Pass the HTTP server to WebSocketServer
 
 const rooms = new Map<string, Set<WebSocket>>(); // Store room clients
-export const redis = new Redis({ port: 6379, host: "localhost" });
 
 
 const joinRoom = (room: string, ws: WebSocket) => {
@@ -29,10 +37,16 @@ export const broadCastMessage = (room: string, message: string) => {
 };
 
 // Start listening on the HTTP server
-server.listen(PORT, () => {
+server.listen(PORT, async() => {
   console.log(`Server running at port ${PORT}`);
+  await subscriber.subscribe("MESSAGE")
 });
-
+subscriber.on("message",(channel,message)=>{
+    if(channel==="MESSAGE"){
+      const {room,data} = JSON.parse(message)
+      broadCastMessage(room,data)
+    }
+})
 interface WsData {
   event: "joinRoom" | "message";
   room?: string;

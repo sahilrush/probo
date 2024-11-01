@@ -1,80 +1,76 @@
 import { inrBalances } from "../db";
-import { publishMessage } from "../utils/publisResponse";
+import { message, publishMessage } from "../utils/publisResponse";
 
-interface OnrampRequest {
-  userId: string;
-  amount: number;
+
+
+
+export const onrampInr = async (data: { userId:string, amount:number }, eventId:string):Promise<any> => {
+  try {
+    const  {userId, amount} = data;
+    console.log(`On ramping  rs ${amount} to user ${userId}`)
+    if (!inrBalances[userId]) {
+      return publishMessage(message(200,`${userId} does not existss` ,null),eventId)
+    }
+    inrBalances[userId].balance+=amount;
+    publishMessage(message(200,"succesfully onRamped "+amount,inrBalances[userId]),eventId)
+
+  }catch(err:any) {
+    publishMessage(message(404, "an error occured", {error:err.message}),eventId)
+  }
 }
 
-// interface ApiResponse {
-//   statusCode: number;
-//   message: string;
-//   data: {
-//     balance: number;
-//     locked: number;
-//   } | null;
-// }
 
-export const onrampInr = async (
-  { userId, amount }: OnrampRequest,
-  eventId: string
-): Promise<void> => {
-  try {
-    // Validate inputs
-    if (!userId || amount === undefined) {
-      throw new Error('Missing required parameters');
-    }
 
-    // Check if user exists
-    if (!inrBalances[userId]) {
-      await publishMessage(
-        {
-          statusCode: 404,
-          message: "User not found",
-          data: null
-        },
-        eventId
-      );
-      return;
-    }
 
-    // Convert amount to rupees and validate
-    const amountInRupees = amount / 100;
-    if (amountInRupees < 0) {
-      await publishMessage(
-        {
-          statusCode: 400,
-          message: "Invalid amount",
-          data: null
-        },
-        eventId
-      );
-      return;
-    }
 
-    // Update balance
-    inrBalances[userId].balance += amount;
 
-    // Publish success response
-    await publishMessage(
-      {
-        statusCode: 200,
-        message: `₹${amountInRupees} added successfully`,
-        data: inrBalances[userId]
-      },
-      eventId
-    );
-  } catch (error) {
-    // Handle errors
-    const errorMessage = error instanceof Error ? error.message : "Internal server error";
+
+
+
+
+
+
+
+
+
+
+//     // Convert amount to rupees and validate
+//     const amountInRupees = amount / 100;
+//     if (amountInRupees < 0) {
+//       await publishMessage(
+//         {
+//           statusCode: 400,
+//           message: "Invalid amount",
+//           data: null
+//         },
+//         eventId
+//       );
+//       return;
+//     }
+
+//     // Update balance
+//     inrBalances[userId].balance += amount;
+
+//     // Publish success  response
+//     await publishMessage(
+//       {
+//         statusCode: 200,
+//         message: `₹${amountInRupees} added successfully`,
+//         data: inrBalances[userId]
+//       },
+//       eventId
+//     );
+//   } catch (error) {
+//     // Handle errors
+//     const errorMessage = error instanceof Error ? error.message : "Internal server error";
     
-    await publishMessage(
-      {
-        statusCode: 500,
-        message: errorMessage,
-        data: null
-      },
-      eventId
-    );
-  }
-};
+//     await publishMessage(
+//       {
+//         statusCode: 500,
+//         message: errorMessage,
+//         data: null
+//       },
+//       eventId
+//     );
+//   }
+// };

@@ -1,21 +1,17 @@
 import { v4 as uuidv4 } from 'uuid';
-import { inrBalances, orderBooks, stockBalances, stockSymbols } from '../db';
-import { OrderBook } from '../db/types'; 
-import { Response ,Request} from 'express';
+import { inrBalances, MarketPrice, orderBooks, stockBalances, stockSymbols } from '../db';
+import {  OrderBook, StockSymbol } from '../db/types'; 
+import { message, publishMessage } from '../utils/publisResponse';
 
 // Core data structures
 
 // Initialize a new market
-export const createMarket = async (req:Request,res:Response): Promise<any> => {
-  const { stockSymbol, title, description } = req.body;
+export const createMarket = async (data:StockSymbol, eventId: string): Promise<any> => {
+  const { stockSymbol, title, description } = data 
 
   try {
-    // Check if market already exists
-    if (stockSymbols[stockSymbol]) {
-      return res.status(400).send(`Market with symbol ${stockSymbol} already exists`)
-      
-    }
-
+    if (stockSymbols[stockSymbol]) 
+   return publishMessage(message(400,`Market with symbol ${stockSymbol} already exists`,null),eventId)
     // Initialize the order book structure
     const initialOrderBook: OrderBook = {
       yes: {},
@@ -29,13 +25,12 @@ export const createMarket = async (req:Request,res:Response): Promise<any> => {
       title,
       description
     };
-    res.status(200).send(`Successfully created market ${stockSymbol}`)
+    publishMessage(message(200,"Successfully created market",`${stockSymbol}`),eventId)
     
   } catch (error: any) {
-    res.status(400).send(`Error`)
-
-  }
-};
+    publishMessage(message(500,"An  error occured",{error:error.message}), eventId);
+    }
+  };
 
 // Initialize user balances
 export const initializeUserBalance = (userId: string, initialBalance: number = 0) => {

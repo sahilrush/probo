@@ -65,3 +65,11 @@ export interface StockSymbol {
 export interface StockSymbols {
   [stockSymbol: string]: StockSymbol;
 }
+
+export interface Market {
+  stockSymbol: string;
+  title: string;
+  description: string;
+  startTime: Date;
+  endTime: Date;
+}

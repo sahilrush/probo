@@ -1,60 +1,54 @@
 import { Response, Request } from "express";
 import { inrBalances, stockBalances } from "../db"; 
+import { publishMessage,message } from "../utils/publisResponse";
 
 
 
 
-export const getBalance = async (req:Request,res:Response):Promise<any>  => {
-         const {userId} = req.params;
+export const getBalance = async (eventId:string, userId:string):Promise<any>  => {
         try{
             if(!inrBalances[userId]) {
-               return res.status(404).json({error: "User not found"})
+               return publishMessage(message(404,`${userId} does not exists`, null),eventId);
+
             }
-            return res.status(200).json({data : inrBalances[userId]});
-        }catch(e) {
-            return res.status(500).json({error:"an unexpected error occured"})
+               publishMessage(message(200,"success",inrBalances[userId]),eventId)
+
+        }catch(err:any) {
+            console.log(err)
+        
+        }
+}
+
+export const getBalanceAll = async(eventId:string):Promise<any> => {
+    try{
+        publishMessage(message(200,"Success", inrBalances),eventId)
+    }catch(e:any) {
+        console.log(e)
         }
 }
 
 
 
+export const getStockBalance = async(userId:string, eventId:string):Promise<any> => {
+        try{
+            if(!stockBalances[userId]){
+                return publishMessage(message(404,`${userId} does not exists`, null),eventId)
+            }
+            publishMessage(message(200,"success",stockBalances[userId]),eventId)
+
+        }catch(err:any){
+    console.log(err)
+        }}
 
 
-export const getBalanceAll = async(req:Request,res:Response):Promise<any> => {
-    try{
-        return    res.status(200).json({data:inrBalances})
-    }catch(e) {
-        return res.status(500).json({
-            e:"an unexpected error occured"
-        })
-    }
-}
 
+export const getStockBalanceAll = async(eventId:string):Promise<any> => {
 
-
-export const getStockBalance = async(req:Request, res:Response):Promise<any> => {
-    const {userId} = req.params;
-
-    try{
-        if(!stockBalances[userId]) {
-            return res.status(404).json({ e:"user not found"})
+        try{
+          publishMessage(message(200,"success",stockBalances),eventId)
+        }catch(err:any){
+            console.log(err)
         }
-        return res.status(201).json({data:stockBalances[userId]})
-
-
-    }catch(e) {
-        res.status(500).json({e:" invalid error occur"})
-    }
-}
-
-export const getStockBalanceAll = async(req:Request,res:Response):Promise<any> => {
-      try{
-        return res.status(200).json({
-            data:stockBalances
-        })
-      }catch(e) {
-        res.status(500).json({ e: "an unexpected error occured"})
-      }
 }
 
 
