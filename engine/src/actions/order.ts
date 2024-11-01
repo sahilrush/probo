@@ -1,6 +1,7 @@
-import { Response, Request } from "express";
+import e, { Response, Request } from "express";
 import crypto from "crypto"
-import { inrBalances, orderBooks, stockBalances } from "../db";
+import { inrBalances, orderBooks, stockBalances, stockSymbols } from "../db";
+import { message, publishMessage } from "../utils/publisResponse";
 
 
 interface PlaceOrderRequest {
@@ -10,7 +11,6 @@ interface PlaceOrderRequest {
   price: number;
   stockType: "yes" | "no";
 }
-
 interface OrderListItem {
   id: string;
   stockSymbol: string;
@@ -58,7 +58,6 @@ const validateOrder = (
   return { isValid: true };
 };
 
-// Process matching orders
 const processOrders = (
   stockSymbol: string,
   orderType: "yes" | "no",
@@ -140,17 +139,13 @@ const initializeStockBalances = (userId: string, stockSymbol: string) => {
   }
 };
 
-export const createBuyOrder = async (
-  req: Request<{}, {}, PlaceOrderRequest>,
-  res: Response
-): Promise<any> => {
-  const { userId, stockSymbol, quantity, price, stockType } = req.body;
-
+export const createBuyOrder = async ( data:OrderListItem, eventId:string): Promise<any> => {
+  const { userId, stockSymbol, quantity, price, stockType } = data;
   try {
     // Validate order
     const validation = validateOrder(userId, stockSymbol, quantity, price);
     if (!validation.isValid) {
-      return res.status(400).json({ error: validation.error });
+      return publishMessage(message(400, "Invalid params", null),eventId);
     }
 
     const orderId = crypto.randomUUID();
@@ -223,37 +218,27 @@ export const createBuyOrder = async (
     };
 
 
-
-    res.status(201).json({
-      message: `Buy order for '${stockType}' added for ${stockSymbol}`,
-      orderId,
-      filledQuantity: filledQty,
-      remainingQuantity: remainingQty,
-      orderDetails
-    });
-
-
-
+publishMessage(message(201, `Buy order for ${stockType} added for ${stockSymbols}`, {
+  orderId,
+  filledQuantity: filledQty,  
+  remainingQuantity: remainingQty,  
+  orderDetails  
+}), eventId)
 
 
   } catch (error) {
     console.error("Error creating buy order:", error);
-    res.status(500).json({ error: "Internal server error" });
+    publishMessage(message(500,"Invalid error occured",{error:message} ),eventId)
   }
 };
 
-export const createSellOrder = async (
-  req: Request<{}, {}, PlaceOrderRequest>,
-  res: Response
-): Promise<any> => {
-  const { userId, stockSymbol, quantity, price, stockType } = req.body;
+export const createSellOrder = async (data:OrderListItem, eventId:string): Promise<any> => {
+  const { userId, stockSymbol, quantity, price, stockType } = data;
 
   try {
     // First validate if stock exists in orderBooks
     if (!orderBooks[stockSymbol]) {
-      return res.status(400).json({ 
-        error: `Stock symbol '${stockSymbol}' not found in order books` 
-      });
+        publishMessage(message(400, `Stock symbol ${stockSymbol} not found in order books`,null),eventId)
     }
 
     // Check if user has sufficient stocks
@@ -262,14 +247,14 @@ export const createSellOrder = async (
       !stockBalances[userId]?.[stockSymbol][stockType] ||
       stockBalances[userId][stockSymbol][stockType].quantity < quantity
     ) {
-      return res.status(400).json({ error: "Insufficient stocks to sell" });
+
+      publishMessage(message(400,"insufficant stocks to sell",null),eventId)  
     }
 
     // Additional validation for quantity and price
     if (quantity <= 0 || price <= 0) {
-      return res.status(400).json({ 
-        error: "Quantity and price must be greater than 0" 
-      });
+      publishMessage(message(400,"Quantity and price must be greater than 0",null),eventId) 
+      
     }
 
     const orderId = crypto.randomUUID();
@@ -343,17 +328,12 @@ export const createSellOrder = async (
       totalPrice: quantity * price * 100
     };
 
-
-
-
-
-    res.status(201).json({
-      message: `Sell order for ${stockType} stock placed for ${stockSymbol}`,
-      orderId,
-      filledQuantity,
-      remainingQuantity,
-      orderDetails
-    });
+      publishMessage(message(201, `Sell order for ${stockType} stock placed for ${stockSymbol}`, {
+        orderId,
+        filledQuantity,
+        remainingQuantity,
+        orderDetails
+      }), eventId)
 
   } catch (error) {
     console.error("Error creating sell order:", error);
@@ -362,7 +342,7 @@ export const createSellOrder = async (
       stockBalances[userId][stockSymbol][stockType].quantity += quantity;
       stockBalances[userId][stockSymbol][stockType].locked -= quantity;
     }
-    res.status(500).json({ error: "Internal server error" });
+    publishMessage(message(500, "An error occurred", { error: message }), eventId); 
   }
 };
 

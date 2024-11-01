@@ -14,8 +14,6 @@ balanceRouter.get("/inr/:userId", async (req: Request, res) => {
 balanceRouter.get("/inr/", async(req: Request, res) => {
   try {
    await  pushToQueue("All_INR_balance", {}, res);
-   
-
   } catch (error: any) {
     res.status(500).send(error?.message);
   }

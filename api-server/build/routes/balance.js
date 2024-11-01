@@ -24,27 +24,27 @@ exports.balanceRouter.get("/inr/:userId", (req, res) => __awaiter(void 0, void 0
         res.status(500).send(error === null || error === void 0 ? void 0 : error.message);
     }
 }));
-exports.balanceRouter.get("/inr/", (req, res) => {
+exports.balanceRouter.get("/inr/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        (0, redis_1.pushToQueue)("All_INR_balance", {}, res);
+        yield (0, redis_1.pushToQueue)("All_INR_balance", {}, res);
     }
     catch (error) {
         res.status(500).send(error === null || error === void 0 ? void 0 : error.message);
     }
-});
-exports.balanceRouter.get("/stock/:userId", (req, res) => {
+}));
+exports.balanceRouter.get("/stock/:userId", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        (0, redis_1.pushToQueue)("GET_STOCK_BY", req.params.userId, res);
+        yield (0, redis_1.pushToQueue)("GET_STOCK_BY", req.params.userId, res);
     }
     catch (error) {
         res.status(500).send(error === null || error === void 0 ? void 0 : error.message);
     }
-});
-exports.balanceRouter.get("/stock/", (req, res) => {
+}));
+exports.balanceRouter.get("/stock/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        (0, redis_1.pushToQueue)("All_stock_balance", {}, res);
+        yield (0, redis_1.pushToQueue)("All_stock_balance", {}, res);
     }
     catch (error) {
         res.status(500).send(error === null || error === void 0 ? void 0 : error.message);
     }
-});
+}));

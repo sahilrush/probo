@@ -5,7 +5,7 @@ import { pushToQueue } from "../helper/redis";
 
 export const orderRouter = express.Router();
 
-orderRouter.post("/trade/buy/",async(req:Request,res) => {
+orderRouter.post("/buy/",async(req:Request,res) => {
     try{
             await  pushToQueue("BUY_ORDER",req.body,res);
             res.status(200).send("Buy order queued successfully");
@@ -17,7 +17,7 @@ orderRouter.post("/trade/buy/",async(req:Request,res) => {
 
 
 
-orderRouter.post("/trade/sell/", async(req:Request,res) => {
+orderRouter.post("/sell/", async(req:Request,res) => {
     try{
       await  pushToQueue("SELL_ORDER", req.body,res);
       res.status(200).send("Sell order queued successfully");

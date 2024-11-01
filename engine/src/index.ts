@@ -1,10 +1,12 @@
-import http from "http";
+import http, { get } from "http";
 import Redis from "ioredis";
 import { createUser } from "./actions/user";
 import express from "express";
 import { onrampInr } from "./actions/onramp";
 import { getBalance, getBalanceAll, getStockBalance, getStockBalanceAll } from "./actions/balance";
-import { getOrderBook } from "./actions/createSymbol";
+import { createMarket } from "./actions/createSymbol";
+import { createBuyOrder, createSellOrder } from "./actions/order";
+import { getOrderBook } from "./actions/orderBook";
 
 const app = express();
 const PORT = process.env.PORT || 8069;
@@ -37,17 +39,27 @@ const pollQueue = async () => {
           getBalance(data, eventId);
           break;
         case "All_INR_balance":
-          getBalanceAll(data);
+          getBalanceAll(eventId); 
           console.log(data)
           break;
         case "GET_STOCK_BY":
           getStockBalance(data, eventId);
           break;
-        case "ALL_stock_balance":
-          getStockBalanceAll(data);
+        case "All_stock_balance":
+          getStockBalanceAll(eventId);
           break;
           case "ORDER_BOOK":
-            getOrderBook(data,eventId)
+            getOrderBook(eventId)
+            break;  
+            case "CREATE_STOCK": 
+            createMarket(data,eventId)  ; 
+            break;   
+          case "BUY_STOCK": 
+          createBuyOrder(data,eventId)  
+            break;  
+            case "Sell_STOCK":  
+            createSellOrder(data,eventId)  
+            break;    
         default:
           console.warn(`Unknown endpoint: ${endPoint}`);
       }

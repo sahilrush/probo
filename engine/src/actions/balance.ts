@@ -1,7 +1,7 @@
 import { inrBalances, stockBalances } from "../db"; 
 import { publishMessage, message } from "../utils/publisResponse";
 
-export const getBalance = async (eventId: string, userId: string): Promise<any> => {
+export const getBalance = async (userId: string, eventId: string): Promise<any> => {
     try {
         if (!inrBalances[userId]) {
             console.log(`User ${userId} does not exist`);
@@ -17,9 +17,11 @@ export const getBalance = async (eventId: string, userId: string): Promise<any> 
 };
 
 
+
 export const getBalanceAll = async (eventId: string): Promise<any> => {
     try {
-       await publishMessage(message(200, "Success", inrBalances), eventId);
+        await publishMessage(message(200, "Success", inrBalances), eventId);
+        return;
     } catch (err: any) {
         console.error("Error in getBalanceAll:", err);
     }
@@ -39,6 +41,7 @@ export const getStockBalance = async (userId: string, eventId: string): Promise<
 export const getStockBalanceAll = async (eventId: string): Promise<any> => {
     try {
         publishMessage(message(200, "success", stockBalances), eventId);
+        return;
     } catch (err: any) {
         console.error("Error in getStockBalanceAll:", err);
     }

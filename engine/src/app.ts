@@ -30,25 +30,25 @@
 // export default app;
 
 
-import { createBuyOrder, createSellOrder } from './actions/order';
-import {redis} from './index'
-export const processMessages = async ()=>{
-    try {
-        const message = await redis.rpop("messageQueue");
-        if(message){
-            const parsedData = JSON.parse(message);
-            const { data, endPoint, eventId } = parsedData;
-            console.log(parsedData)
-            switch (endPoint) {
-              case "BUY_STOCK":
-                await createBuyOrder(data,eventId);
-                break;
-              case "SELL_STOCK":
-                await createSellOrder(data,eventId);
-                break;
-            }
-        }
-    } catch (error) {
-        console.log(error)
-    }
-}   
+// import { createBuyOrder, createSellOrder } from './actions/order';
+// import {redis} from './index'
+// export const processMessages = async ()=>{
+//     try {
+//         const message = await redis.rpop("messageQueue");
+//         if(message){
+//             const parsedData = JSON.parse(message);
+//             const { data, endPoint, eventId } = parsedData;
+//             console.log(parsedData)
+//             switch (endPoint) {
+//               case "BUY_STOCK":
+//                 await createBuyOrder(data,eventId);
+//                 break;
+//               case "SELL_STOCK":
+//                 await createSellOrder(data,eventId);
+//                 break;
+//             }
+//         }
+//     } catch (error) {
+//         console.log(error)
+//     }
+// }   
