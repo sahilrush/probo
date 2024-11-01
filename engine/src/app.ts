@@ -38,6 +38,7 @@ export const processMessages = async ()=>{
         if(message){
             const parsedData = JSON.parse(message);
             const { data, endPoint, eventId } = parsedData;
+            console.log(parsedData)
             switch (endPoint) {
               case "BUY_STOCK":
                 await createBuyOrder(data,eventId);

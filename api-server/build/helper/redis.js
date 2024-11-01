@@ -8,15 +8,21 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.pushToQueue = void 0;
 const __1 = require("..");
+const crypto_1 = __importDefault(require("crypto"));
 function pushToQueue(endPoint, data, res) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             const eventId = generateId();
             const message = { endPoint, data, eventId };
-            yield __1.redis.lpush("messageQueue", JSON.stringify(message));
+            // Ensure data can be stringified
+            const messageString = JSON.stringify(message);
+            yield __1.redis.lpush("messageQueue", messageString);
             console.log(`Waiting for response for event: ${eventId}`);
             const messageHandler = (channel, messageFromPublisher) => __awaiter(this, void 0, void 0, function* () {
                 if (channel === eventId) {
@@ -29,12 +35,13 @@ function pushToQueue(endPoint, data, res) {
             __1.subscriber.on("message", messageHandler);
         }
         catch (error) {
-            console.error("Error queuing message:", error);
-            res.status(500).send({ status: "Error queuing message" });
+            const err = error;
+            console.error("Error queuing message:", err.message); // Log the error message
+            res.status(500).send({ status: "Error queuing message", error: err.message });
         }
     });
 }
 exports.pushToQueue = pushToQueue;
 function generateId() {
-    return crypto.randomUUID();
+    return crypto_1.default.randomUUID();
 }

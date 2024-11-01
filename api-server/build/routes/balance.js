@@ -18,7 +18,7 @@ const redis_1 = require("../helper/redis");
 exports.balanceRouter = express_1.default.Router();
 exports.balanceRouter.get("/inr/:userId", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        yield (0, redis_1.pushToQueue)("INR_balance", { user: req.params.userId }, res);
+        yield (0, redis_1.pushToQueue)("INR_balance", req.params.userId, res);
     }
     catch (error) {
         res.status(500).send(error === null || error === void 0 ? void 0 : error.message);
@@ -34,7 +34,7 @@ exports.balanceRouter.get("/inr/", (req, res) => {
 });
 exports.balanceRouter.get("/stock/:userId", (req, res) => {
     try {
-        (0, redis_1.pushToQueue)("getStockByUserId", { user: req.params.userId }, res);
+        (0, redis_1.pushToQueue)("GET_STOCK_BY", req.params.userId, res);
     }
     catch (error) {
         res.status(500).send(error === null || error === void 0 ? void 0 : error.message);

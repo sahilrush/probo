@@ -5,6 +5,9 @@ import { message, publishMessage } from "../utils/publisResponse"
 export const createUser = async (userId:string,eventId:string)=>{
     try
     {
+
+        console.log(userId)
+        console.log(eventId)
         if(inrBalances[userId])
             return publishMessage(message(400,"User name already taken",null),eventId)
         inrBalances[userId]={balance:0,locked:0}
