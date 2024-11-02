@@ -40,7 +40,6 @@ const validateOrder = (
   }
   
 
-
   if (quantity <= 0 || price <= 0) {
     return { isValid: false, error: "Quantity and price must be greater than 0" };
   }
@@ -142,6 +141,7 @@ const initializeStockBalances = (userId: string, stockSymbol: string) => {
 export const createBuyOrder = async ( data:OrderListItem, eventId:string): Promise<any> => {
   const { userId, stockSymbol, quantity, price, stockType } = data;
   try {
+    console.log("Creating buy order")
     // Validate order
     const validation = validateOrder(userId, stockSymbol, quantity, price);
     if (!validation.isValid) {

@@ -16,19 +16,18 @@ exports.orderRouter = void 0;
 const express_1 = __importDefault(require("express"));
 const redis_1 = require("../helper/redis");
 exports.orderRouter = express_1.default.Router();
-exports.orderRouter.post("/buy/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+exports.orderRouter.post("/buy", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
+        console.log("first");
         yield (0, redis_1.pushToQueue)("BUY_ORDER", req.body, res);
-        res.status(200).send("Buy order queued successfully");
     }
     catch (err) {
         res.status(500).send(err);
     }
 }));
-exports.orderRouter.post("/sell/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+exports.orderRouter.post("/sell", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield (0, redis_1.pushToQueue)("SELL_ORDER", req.body, res);
-        res.status(200).send("Sell order queued successfully");
     }
     catch (err) {
         res.status(500).send(err);

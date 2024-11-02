@@ -54,10 +54,11 @@ const pollQueue = async () => {
             case "CREATE_STOCK": 
             createMarket(data,eventId)  ; 
             break;   
-          case "BUY_STOCK": 
-          createBuyOrder(data,eventId)  
+          case "BUY_ORDER": 
+          console.log("hello")
+            createBuyOrder(data,eventId)  
             break;  
-            case "Sell_STOCK":  
+            case "SELL_ORDER":  
             createSellOrder(data,eventId)  
             break;    
         default:

@@ -23,8 +23,7 @@ export const createMarket = async (data: StockSymbol, eventId: string): Promise<
     return publishMessage(message(500, "An error occurred", { error: error.message }), eventId);
   }
 }
-// };
-
+// }; 
 // export const initializeUserBalance = (userId: string, initialBalance: number = 0) => {
 //   if (!inrBalances[userId]) {
 //     inrBalances[userId] = { balance: initialBalance, locked: 0 };
